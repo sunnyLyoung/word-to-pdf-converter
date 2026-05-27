@@ -1,0 +1,33 @@
+# ===== Maven =====
+target/
+*.jar
+!libs/*.jar
+
+# ===== IDE =====
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+*.swp
+*.swo
+*~
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== Build =====
+dependency-reduced-pom.xml
+
+# ===== Test output =====
+test-output/
+test-data/
+
+# ===== Logs =====
+*.log
+
+# ===== Environment =====
+.env
+*.env.local

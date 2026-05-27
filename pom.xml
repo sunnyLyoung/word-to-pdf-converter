@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.wordtopdf</groupId>
+    <artifactId>word-to-pdf-converter</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+
+    <name>Word to PDF Converter</name>
+    <description>Free Word(.docx/.doc) to PDF converter with Chinese font support, based on Java 8</description>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
+        <docx4j.version>8.3.9</docx4j.version>
+        <poi.version>4.1.2</poi.version>
+    </properties>
+
+    <dependencies>
+        <!-- ========== docx4j for .docx processing (MOXy variant works on Java 8/11+) ========== -->
+        <dependency>
+            <groupId>org.docx4j</groupId>
+            <artifactId>docx4j-JAXB-MOXy</artifactId>
+            <version>${docx4j.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-log4j12</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>log4j</groupId>
+                    <artifactId>log4j</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- docx4j FO export (for PDF via Apache FOP) -->
+        <dependency>
+            <groupId>org.docx4j</groupId>
+            <artifactId>docx4j-export-fo</artifactId>
+            <version>${docx4j.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-log4j12</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>log4j</groupId>
+                    <artifactId>log4j</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- ========== Apache POI for .doc support ========== -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi</artifactId>
+            <version>${poi.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-scratchpad</artifactId>
+            <version>${poi.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>${poi.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.github.virtuald</groupId>
+                    <artifactId>curvesapi</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- ========== JAXB API (Java 8 has it built-in; needed for Java 11+ runtime) ========== -->
+        <dependency>
+            <groupId>javax.xml.bind</groupId>
+            <artifactId>jaxb-api</artifactId>
+            <version>2.3.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.glassfish.jaxb</groupId>
+            <artifactId>jaxb-runtime</artifactId>
+            <version>2.3.1</version>
+        </dependency>
+        <dependency>
+            <groupId>javax.activation</groupId>
+            <artifactId>javax.activation-api</artifactId>
+            <version>1.2.0</version>
+        </dependency>
+
+        <!-- SLF4J API (logging facade, provided scope so caller manages impl) -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>1.7.30</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- ========== Test ========== -->
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.2</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- SLF4J simple for test -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <version>1.7.30</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>${project.artifactId}-${project.version}</finalName>
+        <plugins>
+            <!-- Maven Compiler Plugin -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.1</version>
+                <configuration>
+                    <source>1.8</source>
+                    <target>1.8</target>
+                    <encoding>UTF-8</encoding>
+                </configuration>
+            </plugin>
+
+            <!-- Maven Shade Plugin: relocate dependencies to avoid version conflicts -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.2.4</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <!-- Produce a single shaded JAR -->
+                            <shadedArtifactAttached>true</shadedArtifactAttached>
+                            <shadedClassifierName>jar-with-dependencies</shadedClassifierName>
+                            <createDependencyReducedPom>true</createDependencyReducedPom>
+
+                            <!-- Package relocation to avoid classpath conflicts -->
+                            <relocations>
+                                <relocation>
+                                    <pattern>org.docx4j</pattern>
+                                    <shadedPattern>com.wordtopdf.shaded.docx4j</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.apache.fop</pattern>
+                                    <shadedPattern>com.wordtopdf.shaded.fop</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.apache.xmlgraphics</pattern>
+                                    <shadedPattern>com.wordtopdf.shaded.xmlgraphics</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.apache.avalon</pattern>
+                                    <shadedPattern>com.wordtopdf.shaded.avalon</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.apache.commons</pattern>
+                                    <shadedPattern>com.wordtopdf.shaded.commons</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.apache.poi</pattern>
+                                    <shadedPattern>com.wordtopdf.shaded.poi</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.apache.xmlbeans</pattern>
+                                    <shadedPattern>com.wordtopdf.shaded.xmlbeans</shadedPattern>
+                                </relocation>
+                                <!-- JAXB API & impl (shade to avoid conflict with Java 8 rt.jar) -->
+                                <relocation>
+                                    <pattern>javax.xml.bind</pattern>
+                                    <shadedPattern>com.wordtopdf.shaded.xml.bind</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>javax.activation</pattern>
+                                    <shadedPattern>com.wordtopdf.shaded.activation</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.glassfish</pattern>
+                                    <shadedPattern>com.wordtopdf.shaded.glassfish</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.sun.xml</pattern>
+                                    <shadedPattern>com.wordtopdf.shaded.sun.xml</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.sun.istack</pattern>
+                                    <shadedPattern>com.wordtopdf.shaded.sun.istack</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.eclipse.persistence</pattern>
+                                    <shadedPattern>com.wordtopdf.shaded.eclipse.persistence</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>javax.persistence</pattern>
+                                    <shadedPattern>com.wordtopdf.shaded.persistence</shadedPattern>
+                                </relocation>
+                            </relocations>
+
+                            <!-- Merge service provider files -->
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass></mainClass>
+                                </transformer>
+                                <!-- Merge Apache XML parser configs -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/services/org.apache.xmlgraphics.image.loader.spi.ImageConverter</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/services/org.apache.xmlgraphics.image.loader.spi.ImageLoaderFactory</resource>
+                                </transformer>
+                            </transformers>
+
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>module-info.class</exclude>
+                                    </excludes>
+                                </filter>
+                                <!-- Exclude FOP's hyphenation patterns (large, rarely needed) -->
+                                <filter>
+                                    <artifact>org.apache.xmlgraphics:fop</artifact>
+                                    <excludes>
+                                        <exclude>org/apache/fop/hyphenation/**</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <!-- Repository for docx4j artifacts -->
+    <repositories>
+        <repository>
+            <id>docx4j-releases</id>
+            <name>docx4j Releases</name>
+            <url>https://repository.docx4j.org/maven2/</url>
+        </repository>
+    </repositories>
+</project>
