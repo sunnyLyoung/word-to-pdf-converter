@@ -5,6 +5,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.Map;
 import javax.xml.transform.*;
 import javax.xml.transform.stream.*;
@@ -727,6 +730,186 @@ public class WordToPdfConverter implements FileConverter {
             if (tempDocxFile != null && tempDocxFile.exists()) tempDocxFile.delete();
             if (tempPdfFile != null && tempPdfFile.exists()) tempPdfFile.delete();
         }
+    }
+
+    // ======================== 文档页数统计 ========================
+
+    @Override
+    public int getPageCount(String filePath) throws Exception {
+        if (filePath == null || filePath.trim().isEmpty()) {
+            throw new IllegalArgumentException("文件路径不能为空");
+        }
+        File file = new File(filePath);
+        if (!file.exists()) {
+            throw new FileNotFoundException("文件不存在: " + filePath);
+        }
+
+        initFonts();
+        String lowerName = file.getName().toLowerCase();
+
+        if (lowerName.endsWith(".pdf")) {
+            return countPdfPagesFromFile(file);
+        } else if (lowerName.endsWith(".docx")) {
+            return getWordPageCountByPath(filePath, false);
+        } else if (lowerName.endsWith(".doc")) {
+            return getWordPageCountByPath(filePath, true);
+        } else {
+            throw new IllegalArgumentException(
+                    "不支持的文件格式: " + file.getName() + "，仅支持 .docx、.doc、.pdf");
+        }
+    }
+
+    @Override
+    public int getPageCount(InputStream inputStream, String fileName) throws Exception {
+        if (inputStream == null) {
+            throw new IllegalArgumentException("输入流不能为 null");
+        }
+        if (fileName == null || fileName.trim().isEmpty()) {
+            throw new IllegalArgumentException("文件名不能为空");
+        }
+
+        initFonts();
+        String lowerName = fileName.toLowerCase();
+
+        if (lowerName.endsWith(".pdf")) {
+            byte[] pdfBytes = readStreamToBytes(inputStream);
+            return countPdfPages(pdfBytes);
+        } else if (lowerName.endsWith(".docx")) {
+            return getWordPageCountByStream(inputStream, false);
+        } else if (lowerName.endsWith(".doc")) {
+            return getWordPageCountByStream(inputStream, true);
+        } else {
+            throw new IllegalArgumentException(
+                    "不支持的文件格式: " + fileName + "，仅支持 .docx、.doc、.pdf");
+        }
+    }
+
+    /**
+     * 将 Word 文件渲染为 PDF 并统计页数（文件路径方式）
+     * @param isDoc true 表示 .doc 格式，false 表示 .docx 格式
+     */
+    private int getWordPageCountByPath(String filePath, boolean isDoc) throws Exception {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        if (isDoc) {
+            try (FileInputStream fis = new FileInputStream(filePath)) {
+                convertDocInternal(fis, baos);
+            }
+        } else {
+            try (FileInputStream fis = new FileInputStream(filePath)) {
+                convertDocxInternal(fis, baos);
+            }
+        }
+        return countPdfPages(baos.toByteArray());
+    }
+
+    /**
+     * 将 Word 文件渲染为 PDF 并统计页数（流方式）
+     * @param isDoc true 表示 .doc 格式，false 表示 .docx 格式
+     */
+    private int getWordPageCountByStream(InputStream inputStream, boolean isDoc) throws Exception {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        if (isDoc) {
+            convertDocInternal(inputStream, baos);
+        } else {
+            convertDocxInternal(inputStream, baos);
+        }
+        return countPdfPages(baos.toByteArray());
+    }
+
+    /**
+     * 将输入流全部读取为字节数组
+     */
+    private byte[] readStreamToBytes(InputStream inputStream) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int len;
+        while ((len = inputStream.read(buffer)) != -1) {
+            baos.write(buffer, 0, len);
+        }
+        return baos.toByteArray();
+    }
+
+    /**
+     * 从 PDF 文件统计页数（使用 PDFBox）
+     */
+    private int countPdfPagesFromFile(File pdfFile) throws Exception {
+        try (org.apache.pdfbox.pdmodel.PDDocument pdDoc =
+                     org.apache.pdfbox.pdmodel.PDDocument.load(pdfFile)) {
+            int pageCount = pdDoc.getNumberOfPages();
+            log.info("PDF 页数: {} (文件: {})", pageCount, pdfFile.getName());
+            return pageCount;
+        }
+    }
+
+    /**
+     * 从 PDF 字节数组统计页数（使用 PDFBox）
+     */
+    private int countPdfPages(byte[] pdfBytes) throws Exception {
+        try (org.apache.pdfbox.pdmodel.PDDocument pdDoc =
+                     org.apache.pdfbox.pdmodel.PDDocument.load(pdfBytes)) {
+            int pageCount = pdDoc.getNumberOfPages();
+            log.info("PDF 页数: {}", pageCount);
+            return pageCount;
+        }
+    }
+
+    // ======================== 文件复制 ========================
+
+    @Override
+    public String copyFile(String sourceFilePath, String targetFilePath) throws Exception {
+        if (sourceFilePath == null || sourceFilePath.trim().isEmpty()) {
+            throw new IllegalArgumentException("源文件路径不能为空");
+        }
+        if (targetFilePath == null || targetFilePath.trim().isEmpty()) {
+            throw new IllegalArgumentException("目标文件路径不能为空");
+        }
+
+        File sourceFile = new File(sourceFilePath);
+        if (!sourceFile.exists()) {
+            throw new FileNotFoundException("源文件不存在: " + sourceFilePath);
+        }
+
+        File targetFile = new File(targetFilePath);
+        File parentDir = targetFile.getParentFile();
+        if (parentDir != null && !parentDir.exists()) {
+            if (!parentDir.mkdirs()) {
+                throw new IOException("无法创建目标目录: " + parentDir.getAbsolutePath());
+            }
+        }
+
+        Files.copy(sourceFile.toPath(), targetFile.toPath(),
+                StandardCopyOption.REPLACE_EXISTING);
+
+        log.info("文件复制成功: {} -> {}", sourceFilePath, targetFilePath);
+        return targetFile.getAbsolutePath();
+    }
+
+    @Override
+    public String copyFile(InputStream inputStream, String targetFilePath) throws Exception {
+        if (inputStream == null) {
+            throw new IllegalArgumentException("输入流不能为 null");
+        }
+        if (targetFilePath == null || targetFilePath.trim().isEmpty()) {
+            throw new IllegalArgumentException("目标文件路径不能为空");
+        }
+
+        File targetFile = new File(targetFilePath);
+        File parentDir = targetFile.getParentFile();
+        if (parentDir != null && !parentDir.exists()) {
+            if (!parentDir.mkdirs()) {
+                throw new IOException("无法创建目标目录: " + parentDir.getAbsolutePath());
+            }
+        }
+
+        try {
+            Files.copy(inputStream, targetFile.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING);
+        } finally {
+            try { inputStream.close(); } catch (Exception ignored) {}
+        }
+
+        log.info("文件复制成功（流方式）: {}", targetFilePath);
+        return targetFile.getAbsolutePath();
     }
 
     // ======================== 辅助方法 ========================

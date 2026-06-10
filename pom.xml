@@ -18,6 +18,7 @@
         <maven.compiler.target>1.8</maven.compiler.target>
         <docx4j.version>8.3.9</docx4j.version>
         <poi.version>4.1.2</poi.version>
+        <pdfbox.version>2.0.27</pdfbox.version>
     </properties>
 
     <dependencies>
@@ -76,6 +77,13 @@
                     <artifactId>curvesapi</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+
+        <!-- ========== Apache PDFBox for PDF page count ========== -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>${pdfbox.version}</version>
         </dependency>
 
         <!-- ========== JAXB API (Java 8 has it built-in; needed for Java 11+ runtime) ========== -->
@@ -182,6 +190,10 @@
                                     <pattern>org.apache.xmlbeans</pattern>
                                     <shadedPattern>com.wordtopdf.shaded.xmlbeans</shadedPattern>
                                 </relocation>
+                                <relocation>
+                                    <pattern>org.apache.pdfbox</pattern>
+                                    <shadedPattern>com.wordtopdf.shaded.pdfbox</shadedPattern>
+                                </relocation>
                                 <!-- JAXB API & impl (shade to avoid conflict with Java 8 rt.jar) -->
                                 <relocation>
                                     <pattern>javax.xml.bind</pattern>
@@ -236,6 +248,8 @@
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
                                         <exclude>module-info.class</exclude>
+                                        <!-- 排除构建工具类，不进入 shaded JAR -->
+                                        <exclude>com/wordtopdf/build/**</exclude>
                                     </excludes>
                                 </filter>
                                 <!-- Exclude FOP's hyphenation patterns (large, rarely needed) -->
@@ -246,6 +260,32 @@
                                     </excludes>
                                 </filter>
                             </filters>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Post-process Shaded JAR: fix class names in text config files
+                 maven-shade-plugin relocates .class bytecode but doesn't update
+                 string-based class name references in .properties, .xml,
+                 META-INF/services/*, etc. 使用 JarStringReplacer 处理。 -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.0.0</version>
+                <executions>
+                    <execution>
+                        <id>fix-shaded-jar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>java</goal>
+                        </goals>
+                        <configuration>
+                            <mainClass>com.wordtopdf.build.JarStringReplacer</mainClass>
+                            <arguments>
+                                <argument>${project.build.directory}/${project.build.finalName}-jar-with-dependencies.jar</argument>
+                            </arguments>
+                            <classpathScope>runtime</classpathScope>
                         </configuration>
                     </execution>
                 </executions>
